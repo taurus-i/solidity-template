@@ -62,6 +62,7 @@ contract StoryNFT is IERC5169, ERC721Enumerable, ERC2981, Ownable2Step, Reentran
         factory = msg.sender;
         maxSupply = max_supply;
         description = _description;
+        minter = _owner;
     }
 
     function scriptURI() public view override returns (string[] memory) {
@@ -253,14 +254,7 @@ contract StoryNFT is IERC5169, ERC721Enumerable, ERC2981, Ownable2Step, Reentran
         emit MinterUpdated(_minter);
     }
 
-    function mint(
-        uint64 timestamp,
-        address to,
-        string calldata metadataOrImage,
-        string calldata traits,
-        string calldata channel,
-        bytes[3] calldata args
-    ) public nonReentrant {
+    function mint(address to, string calldata metadataOrImage, string calldata traits) public nonReentrant {
         require(msg.sender == minter, "Not Granted");
         require(maxSupply == 0 || counter < maxSupply, "Over MAX");
         require(bytes(metadataOrImage).length > 0, "Null Image");
@@ -272,5 +266,56 @@ contract StoryNFT is IERC5169, ERC721Enumerable, ERC2981, Ownable2Step, Reentran
         tokenTrait[currentTokenId] = traits;
 
         emit MintDetails(msg.sender, tx.origin, currentTokenId);
+    }
+
+    function batchMintForOne(address to, string[] calldata metadataOrImages, string[] calldata traits)
+        public
+        nonReentrant
+    {
+        require(msg.sender == minter, "Not Granted");
+        require(maxSupply == 0 || counter + metadataOrImages.length <= maxSupply, "Over MAX");
+        require(traits.length == 0 || traits.length == metadataOrImages.length, "Traits Error");
+
+        uint256 currentTokenId = counter;
+        for (uint256 i = 0; i < metadataOrImages.length; i++) {
+            require(bytes(metadataOrImages[i]).length > 0, "Null Image");
+            currentTokenId++;
+
+            _mint(to, currentTokenId);
+            tokenImage[currentTokenId] = metadataOrImages[i];
+            if (traits.length > 0) {
+                tokenTrait[currentTokenId] = traits[i];
+            }
+
+            emit MintDetails(msg.sender, tx.origin, currentTokenId);
+        }
+        counter = currentTokenId;
+    }
+
+    function batchMintForMultiple(
+        address[] calldata toAddresses,
+        string[] calldata metadataOrImages,
+        string[] calldata traits
+    ) public nonReentrant {
+        require(msg.sender == minter, "Not Granted");
+        require(maxSupply == 0 || counter + toAddresses.length <= maxSupply, "Over MAX");
+        require(toAddresses.length == metadataOrImages.length, "Arrays length mismatch");
+        require(traits.length == 0 || traits.length == metadataOrImages.length, "Traits Error");
+
+        uint256 currentTokenId = counter;
+        for (uint256 i = 0; i < toAddresses.length; i++) {
+            require(toAddresses[i] != address(0), "Zero address");
+            require(bytes(metadataOrImages[i]).length > 0, "Null Image");
+            currentTokenId++;
+
+            _mint(toAddresses[i], currentTokenId);
+            tokenImage[currentTokenId] = metadataOrImages[i];
+            if (traits.length > 0) {
+                tokenTrait[currentTokenId] = traits[i];
+            }
+
+            emit MintDetails(msg.sender, tx.origin, currentTokenId);
+        }
+        counter = currentTokenId;
     }
 }
