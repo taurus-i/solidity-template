@@ -30,9 +30,7 @@ contract StoryNFT is IERC5169, ERC721Enumerable, ERC2981, Ownable2Step, Reentran
 
     uint256 public counter;
 
-    mapping(uint256 => string) public tokenImage;
-
-    mapping(uint256 => string) public tokenTrait;
+    string public sharedImage;
 
     event MinterUpdated(address _minter);
 
@@ -92,29 +90,6 @@ contract StoryNFT is IERC5169, ERC721Enumerable, ERC2981, Ownable2Step, Reentran
             return IExtension(extension).tokenURI(tokenId);
         }
 
-        string memory metadataOrImage = tokenImage[tokenId];
-        // Declare bytes32 to hold the first 32 bytes of the string data
-        bytes32 word;
-        // Load the first 32 bytes of the string (skipping the length field)
-        assembly {
-            word := mload(add(metadataOrImage, 32))
-        }
-
-        if (bytes5(word) != bytes5("data:")) {
-            return metadataOrImage;
-        }
-
-        string memory attributes = tokenTrait[tokenId];
-
-        // Load the first 32 bytes of the string (skipping the length field)
-        assembly {
-            word := mload(add(attributes, 32))
-        }
-
-        if (uint256(word) == 0) {
-            attributes = "[]";
-        }
-
         return string(
             abi.encodePacked(
                 "data:application/json;base64,",
@@ -123,15 +98,15 @@ contract StoryNFT is IERC5169, ERC721Enumerable, ERC2981, Ownable2Step, Reentran
                         "{",
                         '"name":"',
                         name(),
+                        " #",
+                        toString(tokenId),
                         '",',
                         '"description":"',
                         description,
                         '",',
                         '"image":"',
-                        metadataOrImage,
-                        '",',
-                        '"attributes":',
-                        attributes,
+                        sharedImage,
+                        '"',
                         "}"
                     )
                 )
@@ -148,6 +123,10 @@ contract StoryNFT is IERC5169, ERC721Enumerable, ERC2981, Ownable2Step, Reentran
         require(_contract != address(0), "Zero address");
         extension = _contract;
         emit ExtensionUpdated(_contract);
+    }
+
+    function setSharedImage(string calldata image) external onlyOwner {
+        sharedImage = image;
     }
 
     // https://docs.opensea.io/docs/contract-level-metadata
@@ -254,67 +233,27 @@ contract StoryNFT is IERC5169, ERC721Enumerable, ERC2981, Ownable2Step, Reentran
         emit MinterUpdated(_minter);
     }
 
-    function mint(address to, string calldata metadataOrImage, string calldata traits) public nonReentrant {
+    function batchMintForOne(address to, uint16 amount) public nonReentrant {
         require(msg.sender == minter, "Not Granted");
-        require(maxSupply == 0 || counter < maxSupply, "Over MAX");
-        require(bytes(metadataOrImage).length > 0, "Null Image");
-        counter++;
-        uint256 currentTokenId = counter;
-
-        _mint(to, currentTokenId);
-        tokenImage[currentTokenId] = metadataOrImage;
-        tokenTrait[currentTokenId] = traits;
-
-        emit MintDetails(msg.sender, tx.origin, currentTokenId);
-    }
-
-    function batchMintForOne(address to, string[] calldata metadataOrImages, string[] calldata traits)
-        public
-        nonReentrant
-    {
-        require(msg.sender == minter, "Not Granted");
-        require(maxSupply == 0 || counter + metadataOrImages.length <= maxSupply, "Over MAX");
-        require(traits.length == 0 || traits.length == metadataOrImages.length, "Traits Error");
+        require(maxSupply == 0 || counter + amount <= maxSupply, "Over MAX");
 
         uint256 currentTokenId = counter;
-        for (uint256 i = 0; i < metadataOrImages.length; i++) {
-            require(bytes(metadataOrImages[i]).length > 0, "Null Image");
+        for (uint256 i = 0; i < amount; i++) {
             currentTokenId++;
-
             _mint(to, currentTokenId);
-            tokenImage[currentTokenId] = metadataOrImages[i];
-            if (traits.length > 0) {
-                tokenTrait[currentTokenId] = traits[i];
-            }
-
-            emit MintDetails(msg.sender, tx.origin, currentTokenId);
         }
         counter = currentTokenId;
     }
 
-    function batchMintForMultiple(
-        address[] calldata toAddresses,
-        string[] calldata metadataOrImages,
-        string[] calldata traits
-    ) public nonReentrant {
+    function batchMintForMultiple(address[] calldata toList, uint16 amount) public nonReentrant {
         require(msg.sender == minter, "Not Granted");
-        require(maxSupply == 0 || counter + toAddresses.length <= maxSupply, "Over MAX");
-        require(toAddresses.length == metadataOrImages.length, "Arrays length mismatch");
-        require(traits.length == 0 || traits.length == metadataOrImages.length, "Traits Error");
+        require(maxSupply == 0 || counter + amount <= maxSupply, "Over MAX");
 
         uint256 currentTokenId = counter;
-        for (uint256 i = 0; i < toAddresses.length; i++) {
-            require(toAddresses[i] != address(0), "Zero address");
-            require(bytes(metadataOrImages[i]).length > 0, "Null Image");
+        for (uint256 i = 0; i < amount; i++) {
+            require(toList[i] != address(0), "Zero address");
             currentTokenId++;
-
-            _mint(toAddresses[i], currentTokenId);
-            tokenImage[currentTokenId] = metadataOrImages[i];
-            if (traits.length > 0) {
-                tokenTrait[currentTokenId] = traits[i];
-            }
-
-            emit MintDetails(msg.sender, tx.origin, currentTokenId);
+            _mint(toList[i], currentTokenId);
         }
         counter = currentTokenId;
     }
